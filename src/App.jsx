@@ -47,6 +47,8 @@ const App = () => {
   const [flippedCards, setFlippedCards] = useState([]);
   const [matchedCards, setMatchedCards] = useState([]);
   const [memoryMoves, setMemoryMoves] = useState(0);
+  // Tambahkan state baru di bagian atas
+  const [isLoadingMemory, setIsLoadingMemory] = useState(false);
 
   // Catch Game
   const [catchHearts, setCatchHearts] = useState(0);
@@ -283,15 +285,31 @@ const App = () => {
     };
   };
 
-  // Memory Card Game Functions
+  // ✅ Auto-init memory game saat pertama kali dibuka
+  useEffect(() => {
+    if (selectedGame === 'memory' && memoryCards.length === 0 && !isLoadingMemory) {
+      initMemoryGame();
+    }
+  }, [selectedGame]);
+
+  // ✅ Tambahkan fungsi preload di atas initMemoryGame
+  const preloadImages = (cards) => {
+    cards.forEach(card => {
+      const img = new Image();
+      img.src = card.path;
+    });
+  };
+
+  // ✅ Update initMemoryGame - panggil preload setelah set cards
   const initMemoryGame = () => {
-    // Reset states dulu sebelum generate cards baru
-    setMemoryCards([]);
+    if (isLoadingMemory) return;
+    setIsLoadingMemory(true);
+
     setFlippedCards([]);
     setMatchedCards([]);
     setMemoryMoves(0);
-    
-    // Gunakan setTimeout untuk prevent blocking UI thread
+    setMemoryCards([]);
+
     setTimeout(() => {
       const categories = ['selfie', 'model', 'formal', 'grid', 'mirror'];
       const randomCategory = categories[Math.floor(Math.random() * categories.length)];
@@ -299,12 +317,11 @@ const App = () => {
                         randomCategory === 'model' ? 4 : 
                         randomCategory === 'formal' ? 2 : 
                         randomCategory === 'grid' ? 4 : 5;
-      
+
       const selectedPhotos = [];
       const usedIndices = new Set();
-      
-      // Generate 8 unique photos
-      while (selectedPhotos.length < 8) {
+
+      while (selectedPhotos.length < 6) {
         const randomIndex = Math.floor(Math.random() * maxPhotos);
         if (!usedIndices.has(randomIndex)) {
           usedIndices.add(randomIndex);
@@ -316,24 +333,23 @@ const App = () => {
           });
         }
       }
-      
-      // Create pairs dan add unique properties
+
       const cardPairs = [...selectedPhotos, ...selectedPhotos].map((card, idx) => ({
         ...card,
-        uniqueId: idx,
-        isFlipped: false,
-        isMatched: false
+        uniqueId: idx
       }));
-      
-      // Shuffle cards - gunakan Fisher-Yates untuk better randomization
-      const shuffled = [...cardPairs];
-      for (let i = shuffled.length - 1; i > 0; i--) {
+
+      for (let i = cardPairs.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        [cardPairs[i], cardPairs[j]] = [cardPairs[j], cardPairs[i]];
       }
-      
-      setMemoryCards(shuffled);
-    }, 100);
+
+      // ✅ Preload images SEBELUM set cards
+      preloadImages(cardPairs);
+
+      setMemoryCards(cardPairs);
+      setIsLoadingMemory(false);
+    }, 200);
   };
 
   const handleCardClick = (cardId) => {
@@ -1542,7 +1558,6 @@ const App = () => {
                           whileTap={{ scale: 0.95 }}
                           onClick={() => {
                             setSelectedGame('memory');
-                            initMemoryGame();
                           }}
                           className="relative group cursor-pointer"
                         >
@@ -1619,6 +1634,7 @@ const App = () => {
                             setMemoryCards([]);
                             setFlippedCards([]);
                             setMatchedCards([]);
+                            setIsLoadingMemory(false);
                           }}
                           className="px-6 py-3 bg-gray-800/80 text-gray-300 rounded-lg font-bold flex items-center gap-2 border border-gray-700 hover:border-pink-500/50 transition-all"
                         >
@@ -1627,12 +1643,12 @@ const App = () => {
                           </svg>
                           Back
                         </motion.button>
-
+                        
                         <div className="text-center">
                           <h2 className="text-3xl font-black text-pink-400 mb-2">🃏 MEMORY GAME</h2>
                           <p className="text-gray-400">Moves: {memoryMoves}</p>
                         </div>
-
+                        
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
@@ -1642,8 +1658,26 @@ const App = () => {
                           Restart
                         </motion.button>
                       </div>
-
-                      {matchedCards.length === memoryCards.length && memoryCards.length > 0 ? (
+                        
+                      {memoryCards.length === 0 ? (
+                        // ✅ LOADING STATE
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="text-center py-20"
+                        >
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                            className="text-8xl mb-6"
+                          >
+                            🃏
+                          </motion.div>
+                          <p className="text-2xl text-pink-400 font-bold mb-2">Shuffling cards...</p>
+                          <p className="text-gray-500">Preparing your memory game</p>
+                        </motion.div>
+                      ) : matchedCards.length === memoryCards.length ? (
+                        // ✅ VICTORY SCREEN
                         <motion.div
                           initial={{ scale: 0, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
@@ -1664,10 +1698,14 @@ const App = () => {
                           </motion.button>
                         </motion.div>
                       ) : (
-                        <div className="grid grid-cols-4 gap-4">
+                        // ✅ GAME GRID - 3 kolom untuk 6 pairs (12 cards)
+                        <div className="grid grid-cols-3 gap-4 max-w-3xl mx-auto">
                           {memoryCards.map((card) => (
                             <motion.div
                               key={card.uniqueId}
+                              initial={{ scale: 0, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              transition={{ delay: card.uniqueId * 0.05 }}
                               whileHover={!flippedCards.includes(card.uniqueId) && !matchedCards.includes(card.uniqueId) ? { scale: 1.05 } : {}}
                               whileTap={!flippedCards.includes(card.uniqueId) && !matchedCards.includes(card.uniqueId) ? { scale: 0.95 } : {}}
                               onClick={() => handleCardClick(card.uniqueId)}
